@@ -18,8 +18,8 @@ Endpoints: <br />
   ```
 <br />
   PUT   - /customers/:customerId -> updates a customer based on data given like in example when you get a customer<br />
-
-  Transactions endpoints:<br />
+<br />
+  Transactions endpoints:<br /><br />
   POST  - /transactions/deposits/:customerId -> makes a deposit for an user with id customerId with request body like example below:<br />
   ```bash
         	{
@@ -32,7 +32,8 @@ Endpoints: <br />
         	{
             "amount": 100
           }
-  ```<br />
+  ```
+
 <br />
   GET   - /transactions/report -> returns report for transactions <br />
         params: fromDate, toDate ex: /transactions/report?fromDate=2021-11-24T23:00:00.000Z&toDate=2021-12-30T23:00:00.000Z<br />
@@ -60,7 +61,7 @@ Provide the json for connecting to the database in ormconfig.json file at root f
   "entities": ["dist/**/*.entity{.ts,.js}"],
   "synchronize": true
 }
-```<br />
+```
 
 
 ```bash
