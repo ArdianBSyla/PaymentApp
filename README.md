@@ -7,6 +7,7 @@ Endpoints: <br />
   GET   - /customers -> returns all customers in database<br />
 <br />
   POST  - /customers -> saves a customer in db with given json data like example below:<br />
+
   ```bash
         {
           "firstName": "firstName",
@@ -21,6 +22,7 @@ Endpoints: <br />
 <br />
   Transactions endpoints:<br /><br />
   POST  - /transactions/deposits/:customerId -> makes a deposit for an user with id customerId with request body like example below:<br />
+
   ```bash
         	{
             "amount": 100
@@ -28,6 +30,7 @@ Endpoints: <br />
   ```
   <br />
   POST  - /transactions/withdrawals/:customerId -> makes a withdrawal for an user with id customerId with request body like example below:<br />
+  
   ```bash
         	{
             "amount": 100
