@@ -2,7 +2,7 @@ import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { CustomerEntity } from 'src/customers/customer.entity';
 import { CustomerRO } from 'src/customers/dto/customer.dto';
-import { Repository } from 'typeorm';
+import { getConnection, Repository } from 'typeorm';
 import { DepositEntity } from './deposit.entity';
 import { DepositDto } from './dto/deposit.dto';
 import { WithdrawDto } from './dto/withdraw.dto';
@@ -23,56 +23,76 @@ export class TransactionsService {
   ) {}
 
   async createDeposit(customerId: number, depositReq: DepositDto): Promise<CustomerRO> {
-    const customer = await this.customersRepository.findOne({where: {id: customerId}})
-    if(!customer) {
-      throw new HttpException(`Customer with given id does not exist`, HttpStatus.BAD_REQUEST)
+    const connection = getConnection();
+    const queryRunner = connection.createQueryRunner();
+
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const customer = await this.customersRepository.findOne({where: {id: customerId}})
+      if(!customer) {
+        throw new HttpException(`Customer with given id does not exist`, HttpStatus.BAD_REQUEST)
+      }
+
+      const transaction = await this.transactionsRepository.create({customer: customer})
+      await this.transactionsRepository.save(transaction);
+
+      const deposit  = await this.depositsRepository.create({amount: depositReq.amount, transaction: transaction})
+      await this.depositsRepository.save(deposit);
+
+      const depositsCount = await this.transactionsRepository
+        .createQueryBuilder('transactions')
+        .innerJoin('transactions.deposit', 'deposits')
+        .select('count(*)')
+        .where(`transactions.customerId = ${customerId}`)
+        .getCount()
+
+      if((depositsCount) %3 === 0) {
+        await this.customersRepository.increment({id: customerId}, 'balance', depositReq.amount)
+        await this.customersRepository.increment({id: customerId}, 'bonusBalance', Math.round(depositReq.amount/100 * customer.bonusRate))
+      } else {
+        await this.customersRepository.increment({id: customerId}, 'balance', depositReq.amount)
+      }
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+    } finally {
+      await queryRunner.release();
     }
-
-    const transaction = await this.transactionsRepository.create({customer: customer})
-    await this.transactionsRepository.save(transaction);
-
-    const deposit  = await this.depositsRepository.create({amount: depositReq.amount, transaction: transaction})
-    await this.depositsRepository.save(deposit);
-
-    const depositsCount = await this.transactionsRepository
-      .createQueryBuilder('transactions')
-      .innerJoin('transactions.deposit', 'deposits')
-      .select('count(*)')
-      .where(`transactions.customerId = ${customerId}`)
-      .getCount()
-
-      console.log(depositsCount);
-      
-
-    if((depositsCount) %3 === 0) {
-      await this.customersRepository.increment({id: customerId}, 'balance', depositReq.amount)
-      await this.customersRepository.increment({id: customerId}, 'bonusBalance', Math.round(depositReq.amount/100 * customer.bonusRate))
-    } else {
-      await this.customersRepository.increment({id: customerId}, 'balance', depositReq.amount)
-    }   
-
+    
     const updatedCustomer = await this.customersRepository.findOne({id: customerId})
     return updatedCustomer.toResponseObject();
   }
 
-
   async createWithdraw(customerId: number, withdrawReq: WithdrawDto) {
-    const customer = await this.customersRepository.findOne({where: {id: customerId}})
-    if(!customer) {
-      throw new HttpException(`Customer not found`, HttpStatus.BAD_REQUEST)
+    const connection = getConnection();
+    const queryRunner = connection.createQueryRunner();
+
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const customer = await this.customersRepository.findOne({where: {id: customerId}})
+      if(!customer) {
+        throw new HttpException(`Customer not found`, HttpStatus.BAD_REQUEST)
+      }
+
+      if(customer.balance < withdrawReq.amount) {
+        throw new HttpException(`You do not have enough balance to withdraw`, HttpStatus.BAD_GATEWAY)
+      }
+
+      const transaction = await this.transactionsRepository.create({customer: customer})
+      await this.transactionsRepository.save(transaction);
+
+      const withdraw  = await this.withdrawalsRepository.create({amount: withdrawReq.amount, transaction: transaction})
+      this.withdrawalsRepository.save(withdraw);
+
+      await this.customersRepository.decrement({id: customerId}, 'balance', withdrawReq.amount)
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+    } finally {
+      await queryRunner.release();
     }
-
-    if(customer.balance < withdrawReq.amount) {
-      throw new HttpException(`You do not have enough balance to withdraw`, HttpStatus.BAD_GATEWAY)
-    }
-
-    const transaction = await this.transactionsRepository.create({customer: customer})
-    await this.transactionsRepository.save(transaction);
-
-    const withdraw  = await this.withdrawalsRepository.create({amount: withdrawReq.amount, transaction: transaction})
-    this.withdrawalsRepository.save(withdraw);
-
-    await this.customersRepository.decrement({id: customerId}, 'balance', withdrawReq.amount)
 
     const updatedCustomer = await this.customersRepository.findOne({id: customerId})
     return updatedCustomer.toResponseObject();
